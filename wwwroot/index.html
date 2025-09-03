@@ -1,0 +1,231 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+   
+    <script>
+    //initialize variables and oninit eent
+        const apiUrl = "https://localhost:7146";
+        const urlParams = new URLSearchParams(window.location.search);
+        let folderpath = "";
+            const folder = urlParams.get('folder');
+            if (folder) {
+                // Use folder value, e.g. load its contents
+                console.log('Selected folder:', folder);
+                folderpath = folder;
+            }
+            else{
+                folderpath = "";
+            }
+        document.addEventListener("DOMContentLoaded", function(){
+            console.log("loaded");
+      
+            init_compontents();
+
+        });
+
+    
+    
+    function init_compontents(){
+       const fileUpload = document.getElementById("file_upload_button");
+      
+            document.getElementById("file_upload_input").value = "";
+            fileUpload.addEventListener("click", uploadFile);
+
+            updateFileList(folderpath)
+            registerButtons();
+            setInterval(() => updateFileList(folderpath), 3000);
+       
+    }
+
+      registerButtons = () => {
+            document.getElementById("create_folder_button").onclick = showCreateFolderPrompt;
+         }
+
+    function action_on_file_directory(name, type, size, fileCount){
+
+        if(name === ".."){
+            const pathParts = folderpath.split('/').filter(part => part); // Split and remove empty parts
+            pathParts.pop(); // Remove the last part to go up one level
+            const newPath = pathParts.join('/'); // Join back to form the new path
+            window.location.href = `/index.html?folder=${encodeURIComponent(newPath)}`;
+        }
+        else if(type === "Directory"){
+            const newPath = folderpath ? `${folderpath}/${name}` : name;
+            window.location.href = `/index.html?folder=${encodeURIComponent(newPath)}`;
+        }
+        else{
+            const dialog = document.getElementById("div_more_info");
+            const dialogContent = document.getElementById("dialog_content");
+            dialogContent.innerHTML = `
+                <h3>File Details</h3>
+                <p><strong>Name:</strong> ${name}</p>
+                <p><strong>Type:</strong> ${type}</p>
+                <p><strong>Size:</strong> ${(size / 1024).toFixed(2)} KB</p>
+                <table><tr><td><button id="download_file_button">Download</button></td><td><button id="delete_file_button">Delete</button></td></tr>
+                <tr><td colspan="2"><button id="close_dialog">Close</button></td></tr></table>
+            `;
+            dialog.style.display = "block";
+
+            document.getElementById("close_dialog").onclick = function() {
+                dialog.style.display = "none";
+            };
+
+            document.getElementById("dialog_close").onclick = function() {
+                dialog.style.display = "none";
+            };
+        }   
+    }
+
+    function showCreateFolderPrompt() {
+
+    const dialog = document.getElementById("div_create_folder");
+    const dialogContent = document.getElementById("dialog_content");
+    dialog.innerHTML = `
+        <div>
+            <label for="folder_name_input">Enter folder name:</label>
+            <input id="folder_name_input" type="text" />
+            <button id="create_folder_confirm">Create</button>
+            <button id="create_folder_cancel">Cancel</button>
+        </div>
+    `;
+    dialog.style.display = "block";
+
+    document.getElementById("create_folder_confirm").onclick = function() {
+        const folderName = document.getElementById("folder_name_input").value.trim();
+        if (folderName !== "") {
+            fetch(`${apiUrl}/api/File/createfolder`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ "folderName": folderName, "folderPath": folderpath })
+            })
+            .then(res => res.json())
+            .then(data => {
+                alert("Folder created!");
+                console.log(data);
+                updateFileList(folderpath);
+                dialog.style.display = "none";
+            })
+            .catch(err => {
+                alert("Error creating folder");
+                console.error(err);
+            });
+        }
+    };
+
+    document.getElementById("create_folder_cancel").onclick = function() {
+        dialog.style.display = "none";
+    };
+
+    document.getElementById("dialog_close").onclick = function() {
+        dialog.style.display = "none";
+    };
+}
+
+    
+ function updateFileList(folderpath){
+    console.log("updating file list");
+    const fileContentDiv = document.getElementById("div_file_content");
+    fetch(`${apiUrl}/api/File/ListFiles?folderpath=${folderpath}`)
+        .then(res => {
+            if (!res.ok) {
+                throw new Error(`API error: ${res.status} ${res.statusText}`);
+            }
+            return res.json();
+        })
+        .then(data => {
+            console.log(data);
+            let html = "<table style='border-collapse:collapse;'><tr><th style='text-align:left; padding-right:10px;'>Name</th><th style='text-align:left; padding:18px;'>Type</th><th style='text-align:left; padding:18px;'>Size</th><th>File Count</tr>";
+            if (!Array.isArray(data) || data.length === 0) {
+                html += `<tr style="cursor:pointer; background-color:#f9f9f9;" onmouseover="this.style.backgroundColor='#ffe066'" onmouseout="this.style.backgroundColor='#f9f9f9'" onclick="action_on_file_directory('..', null, null, null)"><td colspan=4>..</td></tr>`
+                html += "<tr><td>No files found</td></tr>";
+                fileContentDiv.innerHTML = html;
+            }
+            else {    
+                html += `<tr style="cursor:pointer; background-color:#f9f9f9;" onmouseover="this.style.backgroundColor='#ffe066'" onmouseout="this.style.backgroundColor='#f9f9f9'"  onclick="action_on_file_directory('..', null, null, null)"><td colspan=4>..</td></tr>`;
+                data.forEach(file => {
+                    
+                    html += `<tr style="cursor:pointer; background-color:#f9f9f9;" onmouseover="this.style.backgroundColor='#ffe066'" onmouseout="this.style.backgroundColor='#f9f9f9'" onclick="action_on_file_directory('${file.name}', '${file.type}', '${file.size}', '${file.fileCount || ''}')">
+                        
+                        <td style="padding-right:10px;">${file.name}</td>
+                        <td style="padding:18px;">${file.type}</td>
+                        <td style="padding:18px;">${(file.size / 1024).toFixed(2)} KB</td>
+                        <td style="padding:18px;">${file.fileCount ? file.fileCount : (file.type === "Directory" ? '0': '')}</td>
+                    </tr>`;
+        })}
+
+                html += "</table>";
+                fileContentDiv.innerHTML = html;
+ }       ) 
+        .catch(err => { 
+            console.error("Error fetching file list:", err);
+            let html = `<div>Folder Likely Doesn't Exist </div><div><a href="/index.html">Home</a></div>`;
+            fileContentDiv.innerHTML = html;
+        });
+
+ }
+ function  uploadFile(){
+            console.log("uploading file");
+            fileInput = document.getElementById("file_upload_input");
+            if (!fileInput.files.length) {
+                alert("Pick a file first");
+                return;
+            }
+            const file = fileInput.files[0];
+            const maxSize = 20 * 1024 * 1024; // 20MB in bytes
+            if (file.size > maxSize) {
+                alert("File size exceeds 20MB limit. Please select a smaller file.");
+                fileInput.value = ""; // Clear the input
+                return;
+            }
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("folderpath", folderpath);
+
+            try {
+                const res = fetch(`${apiUrl}/api/File/upload`, 
+                { method:'POST', body: fd });
+                const data = res.then(res => res.status );
+                fileInput.value = "";
+                data.then(d => console.log(d) );
+            } catch(ex) {
+                console.log(ex);
+            }
+        }
+    </script>
+</head>
+<body>
+    <div> 
+        Upload Files
+        <input id="file_upload_input" type="file" multiple />
+        <button id="file_upload_button" onclick="uploadFile">Upload</button>
+        <button id="create_folder_button">Create Folder</button>
+    </div>
+    <div id="div_create_folder" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; border:1px solid #ccc; box-shadow:0 2px 10px rgba(0,0,0,0.2); padding:20px; z-index:1000; min-width:300px;">
+    </div>
+    <div>
+    <div class="search">
+        <input placeholder="Search For Files" /><button>clear</button>
+    </div>
+
+    </div>
+    <div style="display: flex; width: 100%;">
+        <div style="flex: .3; min-height: 500px; background: #11cccc; padding: 10px; margin: 5px;">
+            <span>Current Directory:<span id="span_curr_directory"></span>
+            <div id="div_file_content"> Loading ...</div>
+        </div>
+        <div style="flex: .6; min-height: 500px; background: #11cccc; padding: 10px; margin: 5px;">
+            <span>File Contents</span>
+        
+        </div>
+    </div>
+    <div id="div_more_info" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; border:1px solid #ccc; box-shadow:0 2px 10px rgba(0,0,0,0.2); padding:20px; z-index:1000;">
+        <span id="dialog_close" style="position:absolute; top:10px; right:15px; cursor:pointer; font-weight:bold;">&times;</span>
+        <div id="dialog_content">
+            Pleace holder
+
+        </div>
+    </div>
+
+</body>
+</html>
