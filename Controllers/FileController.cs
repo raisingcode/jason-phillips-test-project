@@ -21,8 +21,21 @@ namespace TestProject.Controllers
     [Route("api/[controller]")]
     public class FileController : ControllerBase
     {
-        private readonly string _targetDirectory = Path.Combine(Directory.GetCurrentDirectory(), "UploadedFiles");
 
+        private readonly IConfiguration _configuration;
+        private readonly string _targetDirectory;
+        
+        public FileController(IConfiguration configuration)
+        {
+            _configuration = configuration;
+            _targetDirectory = _configuration.GetValue<string>("UploadPath") ?? Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
+
+            // Ensure the target directory exists
+            if (!Directory.Exists(_targetDirectory))
+            {
+                Directory.CreateDirectory(_targetDirectory);
+            }
+        }
         // Helper function to count files inside a directory (recursively)
         private int GetFileCount(string directoryPath)
         {
@@ -34,45 +47,70 @@ namespace TestProject.Controllers
         [HttpGet("ListFiles")]
         public IActionResult GetFolderContent([FromQuery] string? folderpath)
         {
-        string potentialPath = _targetDirectory;
-        Console.WriteLine($"Folder path: {folderpath?.ToString()}");
 
-        if (folderpath != null && folderpath.Trim() != "")
-        {
-            Console.WriteLine("Combining paths");
-            var subPaths = folderpath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            potentialPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
-        }
-        if (!Directory.Exists(potentialPath))
-        {
-            return NotFound(new DirectoryItem { ErrorMessage = "Specified folder does not exist." });
-        }
+            string potentialPath = _targetDirectory;
+            Console.WriteLine($"Folder path: {folderpath?.ToString()}");
+
+            if (!string.IsNullOrWhiteSpace(folderpath))
+            {
+                Console.WriteLine("Combining paths");
+
+                // Sanitize the input path to prevent directory traversal attacks
+                folderpath = folderpath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                // Remove any parent directory references for security
+                if (folderpath.Contains(".."))
+                {
+                    return BadRequest(new DirectoryItem { ErrorMessage = "Invalid path." });
+                }
+
+                // Split and combine the path properly
+                var subPaths = folderpath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                Console.WriteLine("subPaths: " + string.Join(", ", subPaths));
+
+                potentialPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
+            }
+
+            if (!Directory.Exists(potentialPath))
+            {
+                return NotFound(new DirectoryItem { ErrorMessage = "Specified folder does not exist." });
+            }
 
             var files = Directory.GetFiles(potentialPath);
             var directories = Directory.GetDirectories(potentialPath);
 
-            var dirItems = directories.Select(d => new DirectoryItem {
+            var dirItems = directories.Select(d => new DirectoryItem
+            {
                 Name = Path.GetFileName(d),
                 Type = "Directory",
                 FileCount = GetFileCount(d)
             }).ToList();
-            var fileItems = files.Select(f => new DirectoryItem { Name = Path.GetFileName(f), Type = "File", Size = new FileInfo(f).Length }).ToList();
+
+            var fileItems = files.Select(f => new DirectoryItem
+            {
+                Name = Path.GetFileName(f),
+                Type = "File",
+                Size = new FileInfo(f).Length
+            }).ToList();
 
             var result = dirItems.Concat(fileItems).ToList();
             return Ok(result);
         }
+
         [HttpPost("CreateFolder")]
-        public IActionResult CreateFolder([FromBody] Dictionary<string,string> body)
+        public IActionResult CreateFolder([FromBody] Dictionary<string, string> body)
         {
             var foldername = body["folderName"].ToString();
             var folderpath = body.ContainsKey("folderPath") ? body["folderPath"].ToString() : null;
+            Console.WriteLine($"Folder path: {folderpath?.ToString()}");
+            Console.WriteLine("Target path: " + _targetDirectory);
             var potentialPath = "";
             if (folderpath != null && folderpath.Trim() != "")
             {
-            Console.WriteLine("Combining paths");
-            var subPaths = folderpath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            potentialPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
-         
+                Console.WriteLine("Combining paths");
+                var subPaths = folderpath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                potentialPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
+
                 if (!Directory.Exists(potentialPath))
                 {
                     return NotFound(new DirectoryItem { ErrorMessage = "Specified parent folder does not exist." });
@@ -81,7 +119,7 @@ namespace TestProject.Controllers
             }
             else
             {
-                potentialPath = Path.Combine(_targetDirectory, foldername);
+                potentialPath = _targetDirectory;
             }
 
             Console.WriteLine(foldername);
@@ -91,7 +129,7 @@ namespace TestProject.Controllers
             var newFolderPath = Path.Combine(potentialPath, foldername);
 
             if (Directory.Exists(newFolderPath))
-            return Conflict("Folder already exists.");
+                return Conflict("Folder already exists.");
 
             Directory.CreateDirectory(newFolderPath);
             return Ok(new { foldername, path = newFolderPath });
@@ -100,7 +138,7 @@ namespace TestProject.Controllers
         [HttpPost("upload")]
         public async Task<IActionResult> UploadFile(IFormFile file, [FromForm] string? folderpath)
         {
-            string currentPath=""; 
+            string currentPath = "";
             currentPath = folderpath != null && folderpath.Trim() != "" ? Path.Combine(_targetDirectory, folderpath) : _targetDirectory;
             if (file == null || file.Length == 0)
                 return BadRequest("No file uploaded.");
@@ -117,5 +155,58 @@ namespace TestProject.Controllers
 
             return Ok(new { file.FileName, filePath });
         }
+
+        [HttpGet("download")]
+        public IActionResult DownloadFile([FromQuery] string filepath, string filename)
+        {
+            Console.WriteLine("download file called");
+            string potentialPath = filepath == "/" ? Path.Combine(_targetDirectory, filename) :
+                Path.Combine(_targetDirectory, filepath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), filename);
+
+            if (!System.IO.File.Exists(potentialPath))
+            {
+                return NotFound(new { errorMessage = "Specified file does not exist." });
+            }
+
+            var memory = new MemoryStream();
+            using (var stream = new FileStream(potentialPath, FileMode.Open))
+            {
+                stream.CopyTo(memory);
+            }
+            memory.Position = 0;
+            var contentType = "APPLICATION/octet-stream";
+            return File(memory, contentType, Path.GetFileName(potentialPath));
+        }
+
+        [HttpGet("getfileInfo")]
+
+        public IActionResult GetFileInfo([FromQuery] string filepath, string filename)
+        {
+
+            Console.Write($"filepath: {filepath}, filename: {filename}");
+            string potentialPath = filepath == "/" ? Path.Combine(_targetDirectory, filename) :
+                Path.Combine(_targetDirectory, filepath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), filename);
+
+            Console.WriteLine("target path: " + _targetDirectory);
+            Console.WriteLine($"Potential file path: {potentialPath}");
+            if (!System.IO.File.Exists(potentialPath))
+            {
+                return NotFound(new { errorMessage = "Specified file does not exist." });
+            }
+
+            var fileInfo = new FileInfo(potentialPath);
+            var fileDetails = new
+            {
+                Name = fileInfo.Name,
+                Size = fileInfo.Length,
+                Type = fileInfo.Extension,
+                CreatedAt = fileInfo.CreationTime,
+                ModifiedAt = fileInfo.LastWriteTime,
+                FullPath = fileInfo.FullName
+            };
+
+            return Ok(fileDetails);
+        }
+
     }
 }
