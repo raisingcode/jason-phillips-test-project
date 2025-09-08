@@ -33,6 +33,48 @@
 
         });
 
+        function action_on_search(name, type, filepath) {
+            if(type === "Directory") {
+                filepath = filepath + '/' + name;
+                window.location.href = `/index.html?folder=${encodeURIComponent(filepath)}`;
+            }   
+            if(type == "File") {
+                
+                showFileDetails(filepath, name);
+            }
+        }
+        function search_directory(searchQuery,folderpath=null) {
+            document.getElementById("file_search_div").style.display = "block";
+            fetch(`${apiUrl}/api/File/searchfiles?searchTerm=${searchQuery}&folderpath=${folderpath}&includeSubfolders=true`)
+                .then(res => res.json())
+                .then(data => {
+                    console.log(data);
+                    let html = `<h3>Search Results for ${searchQuery} </h3><table style='border-collapse:collapse;'><tr><th style='text-align:left; padding-right:10px;'>Path</th><th style='text-align:left; padding-right:10px;'>Name</th><th style='text-align:left; padding:18px;'>Type</th><th style='text-align:left; padding:18px;'>Size</th><th>File Count</tr>`;
+                    if (!Array.isArray(data.results) || data.results.length === 0) {
+                        html += "<tr><td>No files found</td></tr>";
+                        document.getElementById("file_search_dialog_content").innerHTML = html;
+                    }
+                    else {
+                        data.results.forEach(file => {
+
+                        html += `<tr style="cursor:pointer; background-color:#f9f9f9;" onmouseover="this.style.backgroundColor='#ffe066'" onmouseout="this.style.backgroundColor='#f9f9f9'" onclick="action_on_search('${file.fileName}', '${file.type}', '${file.filePath}')">
+                        <td style="padding-right:10px;">${file.filePath}</td>
+                        <td style="padding:18px;">${file.fileName}</td>
+                        <td style="padding:18px;">${file.type}</td >
+                   
+                    </tr>`;
+                        })
+                    }
+
+                    html += "</table>";
+                    document.getElementById("file_search_dialog_content").innerHTML = html;
+                })
+                .catch(err => {
+                    console.error("Error fetching file list:", err);
+                    let html = `<div>Error fetching search results</div>`;
+                    document.getElementById("file_search_dialog_content").innerHTML = html;
+                });
+        }
 
 
         function init_compontents() {
@@ -136,7 +178,9 @@
         function updateFileList(folderpath) {
             console.log("updating file list");
             const fileContentDiv = document.getElementById("div_file_content");
-            fetch(`${apiUrl}/api/File/ListFiles?folderpath=${folderpath}`)
+            const spanCurrDir = document.getElementById("span_curr_directory");
+           folderpath = folderpath.replace(/\\+/g, '/').replace(/\/\//g, ''); // Normalize slashes');
+            spanCurrDir.textContent = " /" +( folderpath ? folderpath : "");            fetch(`${apiUrl}/api/File/ListFiles?folderpath=${folderpath}`)
                 .then(res => {
                     if (!res.ok) {
                         throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -197,6 +241,7 @@
 
                 </div>`;
                 dialogContent.innerHTML = htmlvalue;
+                dialog.style.zIndex = 1000;
                 dialog.style.display = "block";
              document.getElementById("close_dialog").onclick = function () {
                 dialog.style.display = "none";
@@ -277,6 +322,9 @@
         <div><input id="file_upload_input" type="file" multiple /> <button id="file_upload_button" onclick="uploadFile">Upload</button></div>
  
         </div>
+         <div> <h4>Search Files (in Directory)</h4>
+                   <div><input placeholder="Search For Files" /><button onclick="search_directory('hi')">GO</button></div>
+        </div>
         <div> <h4>Create Folder</h4>
                    <div><button id="create_folder_button">Create Folder</button></div>
         </div>
@@ -285,10 +333,7 @@
         style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; border:1px solid #ccc; box-shadow:0 2px 10px rgba(0,0,0,0.2); padding:20px; z-index:1000; min-width:300px;">
     </div>
     <div>
-        <div class="search">
-            <!-- Future feature 
-            <input placeholder="Search For Files" /><button>clear</button> -->
-        </div>
+
         </div>
     </div>
     <div id="div_more_info"
@@ -300,7 +345,14 @@
 
         </div>
     </div>
+        <div id="file_search_div"
+        style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; border:1px solid #ccc; box-shadow:0 2px 10px rgba(0,0,0,0.2); padding:20px; z-index:500;">
+        <span id="filse_search_dialog_close"
+            style="position:absolute; top:10px; right:15px; cursor:pointer; font-weight:bold;">&times;</span>
+        <div id="file_search_dialog_content">
+            Pleace holder
 
-</body>
+        </div>
+    </div>
 
 </html>

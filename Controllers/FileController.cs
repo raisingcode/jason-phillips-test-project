@@ -6,6 +6,21 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 
+// Add this class for search results
+public class SearchResult
+{
+    public string? FileName { get; set; }
+    public string? FilePath { get; set; } // Relative path from target directory
+    public string? FileExtension { get; set; }
+    public long Size { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime ModifiedAt { get; set; }
+
+    public string? Type { get; set; } // "File" or "Directory"
+}
+
+
+
 public class DirectoryItem
 {
     public string? Name { get; set; }
@@ -134,7 +149,121 @@ namespace TestProject.Controllers
             Directory.CreateDirectory(newFolderPath);
             return Ok(new { foldername, path = newFolderPath });
         }
+        [HttpGet("searchfiles")]
+public IActionResult SearchFiles([FromQuery] string searchTerm, [FromQuery] string? folderpath, [FromQuery] bool? includeSubfolders = true)
+{
+    if (string.IsNullOrWhiteSpace(searchTerm))
+        return BadRequest(new { errorMessage = "Search term cannot be empty." });
 
+    string searchPath = _targetDirectory;
+            Console.WriteLine(searchTerm);
+    // Handle specific folder path if provided
+    if (!string.IsNullOrWhiteSpace(folderpath))
+    {
+        // Sanitize the input path to prevent directory traversal attacks
+        folderpath = folderpath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                // Remove any parent directory references for security
+                if (folderpath.Contains(".."))
+                {
+                    return BadRequest(new { errorMessage = "Invalid path." });
+                }
+                else if (folderpath == "/" || folderpath == "\\" || String.IsNullOrWhiteSpace(folderpath) || folderpath == "null")
+                {
+                    searchPath = _targetDirectory;
+                }
+                else
+                {
+                    var subPaths = folderpath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                    searchPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
+                }
+                Console.WriteLine("Search path: " + searchPath);
+        if (!Directory.Exists(searchPath))
+                {
+                    return NotFound(new { errorMessage = "Specified search folder does not exist." });
+                }
+    }
+
+    try
+    {
+        var searchOption = includeSubfolders == true ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        var matchingFiles = new List<SearchResult>();
+
+                //Search for Directories matching the search term
+        var directories = Directory.GetDirectories(searchPath, "*", searchOption)
+            .Where(dir => Path.GetFileName(dir).Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        foreach (var dir in directories)
+        {   
+            var dirInfo = new DirectoryInfo(dir);
+            
+            // Calculate relative path from target directory
+            var relativePath = Path.GetRelativePath(_targetDirectory, Path.GetDirectoryName(dir) ?? "");
+            
+            // Normalize path separators and handle root directory
+            relativePath = relativePath.Replace('\\', '/');
+            if (relativePath == ".")
+                relativePath = "/";
+            else if (!relativePath.StartsWith("/"))
+                relativePath = "/" + relativePath;
+
+            matchingFiles.Add(new SearchResult
+            {
+                FileName = dirInfo.Name,
+                FilePath = relativePath,
+                FileExtension = null,
+                Size = 0,
+                CreatedAt = dirInfo.CreationTime,
+                ModifiedAt = dirInfo.LastWriteTime,
+                Type = "Directory"
+            });
+        }
+        
+        // Search for files matching the search term
+                    var files = Directory.GetFiles(searchPath, "*", searchOption)
+            .Where(file => Path.GetFileName(file).Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var file in files)
+        {
+            var fileInfo = new FileInfo(file);
+            
+            // Calculate relative path from target directory
+            var relativePath = Path.GetRelativePath(_targetDirectory, Path.GetDirectoryName(file) ?? "");
+            
+            // Normalize path separators and handle root directory
+            relativePath = relativePath.Replace('\\', '/');
+            if (relativePath == ".")
+                relativePath = "/";
+            else if (!relativePath.StartsWith("/"))
+                relativePath = "/" + relativePath;
+
+            matchingFiles.Add(new SearchResult
+            {
+                FileName = fileInfo.Name,
+                FilePath = relativePath,
+                FileExtension = fileInfo.Extension,
+                Size = fileInfo.Length,
+                CreatedAt = fileInfo.CreationTime,
+                ModifiedAt = fileInfo.LastWriteTime,
+                Type = "File"
+            });
+        }
+
+        return Ok(new 
+        { 
+            searchTerm,
+            searchPath = Path.GetRelativePath(_targetDirectory, searchPath).Replace('\\', '/'),
+            includeSubfolders,
+            totalResults = matchingFiles.Count,
+            results = matchingFiles.OrderBy(r => r.Type).ThenBy(r => r.FileName)
+        });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { errorMessage = $"An error occurred while searching: {ex.Message}" });
+    }
+}
         [HttpPost("upload")]
         public async Task<IActionResult> UploadFile(IFormFile file, [FromForm] string? folderpath)
         {
