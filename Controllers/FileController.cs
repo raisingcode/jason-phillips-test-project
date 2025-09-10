@@ -19,7 +19,11 @@ public class SearchResult
     public string? Type { get; set; } // "File" or "Directory"
 }
 
-
+    public class DeleteFileRequest
+    {
+        public string? Name { get; set; }
+        public string? FilePath { get; set; }   // optional subdirectory
+    }
 
 public class DirectoryItem
 {
@@ -39,7 +43,7 @@ namespace TestProject.Controllers
 
         private readonly IConfiguration _configuration;
         private readonly string _targetDirectory;
-        
+
         public FileController(IConfiguration configuration)
         {
             _configuration = configuration;
@@ -64,11 +68,11 @@ namespace TestProject.Controllers
         {
 
             string potentialPath = _targetDirectory;
-           // Console.WriteLine($"Folder path: {folderpath?.ToString()}");
+            // Console.WriteLine($"Folder path: {folderpath?.ToString()}");
 
             if (!string.IsNullOrWhiteSpace(folderpath))
             {
-              
+
 
                 // Sanitize the input path to prevent directory traversal attacks
                 folderpath = folderpath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -122,7 +126,7 @@ namespace TestProject.Controllers
             var potentialPath = "";
             if (folderpath != null && folderpath.Trim() != "")
             {
-               
+
                 var subPaths = folderpath.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 potentialPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
 
@@ -149,19 +153,20 @@ namespace TestProject.Controllers
             Directory.CreateDirectory(newFolderPath);
             return Ok(new { foldername, path = newFolderPath });
         }
-        [HttpGet("searchfiles")]
-public IActionResult SearchFiles([FromQuery] string searchTerm, [FromQuery] string? folderpath, [FromQuery] bool? includeSubfolders = true)
-{
-    if (string.IsNullOrWhiteSpace(searchTerm))
-        return BadRequest(new { errorMessage = "Search term cannot be empty." });
 
-    string searchPath = _targetDirectory;
-  
-    // Handle specific folder path if provided
-    if (!string.IsNullOrWhiteSpace(folderpath))
-    {
-        // Sanitize the input path to prevent directory traversal attacks
-        folderpath = folderpath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        [HttpGet("searchfiles")]
+        public IActionResult SearchFiles([FromQuery] string searchTerm, [FromQuery] string? folderpath, [FromQuery] bool? includeSubfolders = true)
+        {
+            if (string.IsNullOrWhiteSpace(searchTerm))
+                return BadRequest(new { errorMessage = "Search term cannot be empty." });
+
+            string searchPath = _targetDirectory;
+
+            // Handle specific folder path if provided
+            if (!string.IsNullOrWhiteSpace(folderpath))
+            {
+                // Sanitize the input path to prevent directory traversal attacks
+                folderpath = folderpath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
                 // Remove any parent directory references for security
                 if (folderpath.Contains(".."))
@@ -178,92 +183,92 @@ public IActionResult SearchFiles([FromQuery] string searchTerm, [FromQuery] stri
                     searchPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
                 }
                 //Console.WriteLine("Search path: " + searchPath);
-        if (!Directory.Exists(searchPath))
+                if (!Directory.Exists(searchPath))
                 {
                     return NotFound(new { errorMessage = "Specified search folder does not exist." });
                 }
-    }
+            }
 
-    try
-    {
-        var searchOption = includeSubfolders == true ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-        var matchingFiles = new List<SearchResult>();
+            try
+            {
+                var searchOption = includeSubfolders == true ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                var matchingFiles = new List<SearchResult>();
 
                 //Search for Directories matching the search term
-        var directories = Directory.GetDirectories(searchPath, "*", searchOption)
-            .Where(dir => Path.GetFileName(dir).Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        foreach (var dir in directories)
-        {   
-            var dirInfo = new DirectoryInfo(dir);
-            
-            // Calculate relative path from target directory
-            var relativePath = Path.GetRelativePath(_targetDirectory, Path.GetDirectoryName(dir) ?? "");
-            
-            // Normalize path separators and handle root directory
-            relativePath = relativePath.Replace('\\', '/');
-            if (relativePath == ".")
-                relativePath = "/";
-            else if (!relativePath.StartsWith("/"))
-                relativePath = "/" + relativePath;
+                var directories = Directory.GetDirectories(searchPath, "*", searchOption)
+                    .Where(dir => Path.GetFileName(dir).Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                foreach (var dir in directories)
+                {
+                    var dirInfo = new DirectoryInfo(dir);
 
-            matchingFiles.Add(new SearchResult
+                    // Calculate relative path from target directory
+                    var relativePath = Path.GetRelativePath(_targetDirectory, Path.GetDirectoryName(dir) ?? "");
+
+                    // Normalize path separators and handle root directory
+                    relativePath = relativePath.Replace('\\', '/');
+                    if (relativePath == ".")
+                        relativePath = "/";
+                    else if (!relativePath.StartsWith("/"))
+                        relativePath = "/" + relativePath;
+
+                    matchingFiles.Add(new SearchResult
+                    {
+                        FileName = dirInfo.Name,
+                        FilePath = relativePath,
+                        FileExtension = null,
+                        Size = 0,
+                        CreatedAt = dirInfo.CreationTime,
+                        ModifiedAt = dirInfo.LastWriteTime,
+                        Type = "Directory"
+                    });
+                }
+
+                // Search for files matching the search term
+                var files = Directory.GetFiles(searchPath, "*", searchOption)
+        .Where(file => Path.GetFileName(file).Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+                foreach (var file in files)
+                {
+                    var fileInfo = new FileInfo(file);
+
+                    // Calculate relative path from target directory
+                    var relativePath = Path.GetRelativePath(_targetDirectory, Path.GetDirectoryName(file) ?? "");
+
+                    // Normalize path separators and handle root directory
+                    relativePath = relativePath.Replace('\\', '/');
+                    if (relativePath == ".")
+                        relativePath = "/";
+                    else if (!relativePath.StartsWith("/"))
+                        relativePath = "/" + relativePath;
+
+                    matchingFiles.Add(new SearchResult
+                    {
+                        FileName = fileInfo.Name,
+                        FilePath = relativePath,
+                        FileExtension = fileInfo.Extension,
+                        Size = fileInfo.Length,
+                        CreatedAt = fileInfo.CreationTime,
+                        ModifiedAt = fileInfo.LastWriteTime,
+                        Type = "File"
+                    });
+                }
+
+                return Ok(new
+                {
+                    searchTerm,
+                    searchPath = Path.GetRelativePath(_targetDirectory, searchPath).Replace('\\', '/'),
+                    includeSubfolders,
+                    totalResults = matchingFiles.Count,
+                    results = matchingFiles.OrderBy(r => r.Type).ThenBy(r => r.FileName)
+                });
+            }
+            catch (Exception ex)
             {
-                FileName = dirInfo.Name,
-                FilePath = relativePath,
-                FileExtension = null,
-                Size = 0,
-                CreatedAt = dirInfo.CreationTime,
-                ModifiedAt = dirInfo.LastWriteTime,
-                Type = "Directory"
-            });
+                return StatusCode(500, new { errorMessage = $"An error occurred while searching: {ex.Message}" });
+            }
         }
-        
-        // Search for files matching the search term
-                    var files = Directory.GetFiles(searchPath, "*", searchOption)
-            .Where(file => Path.GetFileName(file).Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        foreach (var file in files)
-        {
-            var fileInfo = new FileInfo(file);
-            
-            // Calculate relative path from target directory
-            var relativePath = Path.GetRelativePath(_targetDirectory, Path.GetDirectoryName(file) ?? "");
-            
-            // Normalize path separators and handle root directory
-            relativePath = relativePath.Replace('\\', '/');
-            if (relativePath == ".")
-                relativePath = "/";
-            else if (!relativePath.StartsWith("/"))
-                relativePath = "/" + relativePath;
-
-            matchingFiles.Add(new SearchResult
-            {
-                FileName = fileInfo.Name,
-                FilePath = relativePath,
-                FileExtension = fileInfo.Extension,
-                Size = fileInfo.Length,
-                CreatedAt = fileInfo.CreationTime,
-                ModifiedAt = fileInfo.LastWriteTime,
-                Type = "File"
-            });
-        }
-
-        return Ok(new 
-        { 
-            searchTerm,
-            searchPath = Path.GetRelativePath(_targetDirectory, searchPath).Replace('\\', '/'),
-            includeSubfolders,
-            totalResults = matchingFiles.Count,
-            results = matchingFiles.OrderBy(r => r.Type).ThenBy(r => r.FileName)
-        });
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new { errorMessage = $"An error occurred while searching: {ex.Message}" });
-    }
-}
         [HttpPost("upload")]
         public async Task<IActionResult> UploadFile(IFormFile file, [FromForm] string? folderpath)
         {
@@ -316,7 +321,7 @@ public IActionResult SearchFiles([FromQuery] string searchTerm, [FromQuery] stri
             string potentialPath = filepath == "/" ? Path.Combine(_targetDirectory, filename) :
                 Path.Combine(_targetDirectory, filepath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), filename);
 
-    
+
             if (!System.IO.File.Exists(potentialPath))
             {
                 return NotFound(new { errorMessage = "Specified file does not exist." });
@@ -335,6 +340,74 @@ public IActionResult SearchFiles([FromQuery] string searchTerm, [FromQuery] stri
 
             return Ok(fileDetails);
         }
+    
 
+    
+[HttpPost("delete")]
+public IActionResult DeleteFile([FromBody] DeleteFileRequest req)
+{
+    if (string.IsNullOrWhiteSpace(req?.Name))
+        return BadRequest(new { error = "File name is required" });
+
+    var filename = req.Name;
+    var folderpath = req.FilePath;
+    
+    string potentialPath;
+    var currentPath = folderpath != null && folderpath.Trim() != "" ? Path.Combine(_targetDirectory, folderpath) : _targetDirectory;
+
+    Console.WriteLine(_targetDirectory);
+    if (string.IsNullOrWhiteSpace(folderpath) || folderpath == "/" || folderpath == "\\")
+    {
+        // File is in root directory
+        potentialPath = Path.Combine(_targetDirectory, filename);
+    }
+    else
+    {
+        // Sanitize the input path to prevent directory traversal attacks
+        folderpath = folderpath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        
+        // Remove any parent directory references for security
+        if (folderpath.Contains(".."))
+        {
+            return BadRequest(new { error = "Invalid path." });
+        }
+        
+        // Split and combine the path properly (same as other methods)
+        var subPaths = folderpath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+        potentialPath = Path.Combine(_targetDirectory, Path.Combine(subPaths), filename);
+    }
+    
+    Console.WriteLine($"Attempting to delete: {potentialPath}");
+            Console.Write(potentialPath);
+    // Check if it's a file or directory
+    if (System.IO.File.Exists(potentialPath))
+    {
+        try
+        {
+            System.IO.File.Delete(potentialPath);
+            return Ok(new { message = "File deleted", name = filename, filePath = folderpath });
+        }
+        catch (IOException ex)
+        {
+            return StatusCode(500, new { error = "Delete failed", detail = ex.Message });
+        }
+    }
+    else if (Directory.Exists(potentialPath))
+    {
+        try
+        {
+            Directory.Delete(potentialPath, recursive: true); // Set to false if you don't want recursive delete
+            return Ok(new { message = "Directory deleted", name = filename, filePath = folderpath });
+        }
+        catch (IOException ex)
+        {
+            return StatusCode(500, new { error = "Delete failed", detail = ex.Message });
+        }
+    }
+    else
+    {
+        return NotFound(new { error = "File or directory not found" });
+    }
+}
     }
 }

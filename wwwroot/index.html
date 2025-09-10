@@ -103,6 +103,28 @@
         registerButtons = () => {
             document.getElementById("create_folder_button").onclick = showCreateFolderPrompt;
         }
+        function delete_file() {
+            console.log(file_details);
+            console.log(folderpath);
+            fetch(`${apiUrl}/api/File/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ Name: file_details, filePath: folderpath })
+            })
+                .then(function (res) {
+                    return res.json().then(function (data) {
+                        if (!res.ok) {
+                            alert("Failed: " + (data.error || res.statusText));
+                        } else {
+                            alert("Deleted: " + data.name);
+                        }
+                    });
+                })
+                .catch(function (err) {
+                    console.error("Request failed", err);
+                    alert("Request failed: " + err);
+                });
+        }
 
         function action_on_file_directory(name, type, size, fileCount) {
 
@@ -224,7 +246,7 @@
             folderpath = !folderpath ? '\\' : folderpath;
             console.log(folderpath);
             fetch(`${apiUrl}/api/File/GetFileInfo?filepath=${folderpath}&filename=${name}`)
-                .then(res => res.json())
+                .then(res => res.status != 404 ? res.json(): Promise.reject(new Error("File not found")))
                 .then(data => { 
                     console.log(data);
 
@@ -241,6 +263,15 @@
                 dialogContent.innerHTML = htmlvalue;
                 dialog.style.zIndex = 1000;
                 dialog.style.display = "block";
+
+                
+
+            document.getElementById("delete_file_button").onclick = function()
+            {
+                delete_file();
+            }
+            
+
              document.getElementById("close_dialog").onclick = function () {
                 const tempurl = new URL(window.location.href);
                 tempurl.searchParams.delete('fileDetails');
@@ -261,10 +292,9 @@
                 })
                 .catch(err => {
                     console.log("caught error");
-                    console.error(err);
+                  
                     htmlvalue = `<div>Error showing file info ${err}</div>`;
-                    htmlvalue += `<button id="close_dialog">Close</button>`;
-
+                       dialogContent.innerHTML = htmlvalue;  
                 });
             dialogContent.innerHTML = htmlvalue;
 
