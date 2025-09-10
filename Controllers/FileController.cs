@@ -64,11 +64,11 @@ namespace TestProject.Controllers
         {
 
             string potentialPath = _targetDirectory;
-            Console.WriteLine($"Folder path: {folderpath?.ToString()}");
+           // Console.WriteLine($"Folder path: {folderpath?.ToString()}");
 
             if (!string.IsNullOrWhiteSpace(folderpath))
             {
-                Console.WriteLine("Combining paths");
+              
 
                 // Sanitize the input path to prevent directory traversal attacks
                 folderpath = folderpath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -81,7 +81,7 @@ namespace TestProject.Controllers
 
                 // Split and combine the path properly
                 var subPaths = folderpath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
-                Console.WriteLine("subPaths: " + string.Join(", ", subPaths));
+                //Console.WriteLine("subPaths: " + string.Join(", ", subPaths));
 
                 potentialPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
             }
@@ -117,12 +117,12 @@ namespace TestProject.Controllers
         {
             var foldername = body["folderName"].ToString();
             var folderpath = body.ContainsKey("folderPath") ? body["folderPath"].ToString() : null;
-            Console.WriteLine($"Folder path: {folderpath?.ToString()}");
-            Console.WriteLine("Target path: " + _targetDirectory);
+            // Console.WriteLine($"Folder path: {folderpath?.ToString()}");
+            // Console.WriteLine("Target path: " + _targetDirectory);
             var potentialPath = "";
             if (folderpath != null && folderpath.Trim() != "")
             {
-                Console.WriteLine("Combining paths");
+               
                 var subPaths = folderpath.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 potentialPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
 
@@ -137,7 +137,7 @@ namespace TestProject.Controllers
                 potentialPath = _targetDirectory;
             }
 
-            Console.WriteLine(foldername);
+            //Console.WriteLine(foldername);
             if (string.IsNullOrWhiteSpace(foldername))
                 return BadRequest("Folder name cannot be empty.");
 
@@ -156,7 +156,7 @@ public IActionResult SearchFiles([FromQuery] string searchTerm, [FromQuery] stri
         return BadRequest(new { errorMessage = "Search term cannot be empty." });
 
     string searchPath = _targetDirectory;
-            Console.WriteLine(searchTerm);
+  
     // Handle specific folder path if provided
     if (!string.IsNullOrWhiteSpace(folderpath))
     {
@@ -177,7 +177,7 @@ public IActionResult SearchFiles([FromQuery] string searchTerm, [FromQuery] stri
                     var subPaths = folderpath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
                     searchPath = Path.Combine(_targetDirectory, Path.Combine(subPaths));
                 }
-                Console.WriteLine("Search path: " + searchPath);
+                //Console.WriteLine("Search path: " + searchPath);
         if (!Directory.Exists(searchPath))
                 {
                     return NotFound(new { errorMessage = "Specified search folder does not exist." });
@@ -312,12 +312,11 @@ public IActionResult SearchFiles([FromQuery] string searchTerm, [FromQuery] stri
         public IActionResult GetFileInfo([FromQuery] string filepath, string filename)
         {
 
-            Console.Write($"filepath: {filepath}, filename: {filename}");
+            //Console.Write($"filepath: {filepath}, filename: {filename}");
             string potentialPath = filepath == "/" ? Path.Combine(_targetDirectory, filename) :
                 Path.Combine(_targetDirectory, filepath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), filename);
 
-            Console.WriteLine("target path: " + _targetDirectory);
-            Console.WriteLine($"Potential file path: {potentialPath}");
+    
             if (!System.IO.File.Exists(potentialPath))
             {
                 return NotFound(new { errorMessage = "Specified file does not exist." });

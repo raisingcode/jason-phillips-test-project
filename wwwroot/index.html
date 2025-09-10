@@ -11,6 +11,7 @@
         let folderpath = "";
         const folder = urlParams.get('folder');
         const file_item = urlParams.get('file');
+        const file_details = urlParams.get('fileDetails');
         let  download = urlParams.get('download');
         if (folder) {
             // Use folder value, e.g. load its contents
@@ -23,6 +24,7 @@
     
             }
         }
+     
         else {
             folderpath = "";
         }
@@ -32,15 +34,20 @@
             init_compontents();
 
         });
-
+        function close_div(elem) {
+           const div = document.getElementById(elem);
+            div.style.display = "none";
+        }
         function action_on_search(name, type, filepath) {
             if(type === "Directory") {
                 filepath = filepath + '/' + name;
                 window.location.href = `/index.html?folder=${encodeURIComponent(filepath)}`;
             }   
             if(type == "File") {
-                
-                showFileDetails(filepath, name);
+                const tempurl = new URL(window.location.href);
+                tempurl.searchParams.set('folder',filepath);
+                tempurl.searchParams.set('fileDetails', name)
+                window.location.href = tempurl.toString();
             }
         }
         function search_directory(searchQuery,folderpath=null) {
@@ -85,7 +92,11 @@
 
             updateFileList(folderpath)
             registerButtons();
-            setInterval(() => updateFileList(folderpath), 3000);
+            setInterval(() => updateFileList(folderpath), 5000);
+               if(file_details)
+                {
+                    showFileDetails(folderpath,file_details);
+                }
 
         }
 
@@ -106,26 +117,13 @@
                 window.location.href = `/index.html?folder=${encodeURIComponent(newPath)}`;
             }
             else {
-   
-                //replace with showfiledetails
-                showFileDetails(folderpath ,name);
-            //     dialogContent.innerHTML = `
-            //     <h3>File Details</h3>
-            //     <p><strong>Name:</strong> ${name}</p>
-            //     <p><strong>Type:</strong> ${type}</p>
-            //     <p><strong>Size:</strong> ${(size / 1024).toFixed(2)} KB</p>
-            //     <table><tr><td><button id="download_file_button">Download</button></td><td><button id="delete_file_button">Delete</button></td></tr>
-            //     <tr><td colspan="2"><button id="close_dialog">Close</button></td></tr></table>
-            // `;
-            //     dialog.style.display = "block";
+            //its a file 
+              const fileurl = new URL(window.location.href);
+                console.log(fileurl.toString());
 
-            //     document.getElementById("close_dialog").onclick = function () {
-            //         dialog.style.display = "none";
-            //     };
+                fileurl.searchParams.set('fileDetails',name);
+                window.location.href = fileurl.toString();
 
-            //     document.getElementById("dialog_close").onclick = function () {
-            //         dialog.style.display = "none";
-            //     };
             }
         }
 
@@ -219,8 +217,8 @@
 
         }
         function showFileDetails(folderpath,name) {
-            const dialog = document.getElementById("div_more_info");
-            const dialogContent = document.getElementById("dialog_content");
+            const dialog = document.getElementById("div_more_file_info");
+            const dialogContent = document.getElementById("dialog_file_content");
             let htmlvalue = "";
             console.log("showing file details");
             folderpath = !folderpath ? '\\' : folderpath;
@@ -244,7 +242,10 @@
                 dialog.style.zIndex = 1000;
                 dialog.style.display = "block";
              document.getElementById("close_dialog").onclick = function () {
+                const tempurl = new URL(window.location.href);
+                tempurl.searchParams.delete('fileDetails');
                 dialog.style.display = "none";
+                window.location.href = tempurl.toString();
             };
               document.getElementById("download_file_button").onclick = function () {
                
@@ -309,11 +310,11 @@
     <div style="display: flex; width: 100%;">
       
  
-        <div style="flex: .3; min-height: 500px; background: #11cccc; padding: 10px; margin: 5px;">
+        <div style="flex: .3; min-height: 500px; background: #e1e1e1; padding: 10px; margin: 5px;">
             <h3>Current Directory:<span id="span_curr_directory"></span></h3>
                 <div id="div_file_content"> Loading ...</div>
         </div>
-        <div style="flex: .6; min-height: 500px; background: #11cccc; padding: 10px; margin: 5px;">
+        <div style="flex: .6; min-height: 500px; background: #e1e1e1; padding: 10px; margin: 5px;">
            <h3> <span>File Actions</span> </h3>
             <div style="display: flexbox; flex-direction: column; gap: 10px; margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; background: #f9f9f9;">
                  <h4>Upload Files </h4> <br />
@@ -323,7 +324,7 @@
  
         </div>
          <div> <h4>Search Files (in Directory)</h4>
-                   <div><input placeholder="Search For Files" /><button onclick="search_directory('hi')">GO</button></div>
+                   <div><input id="search_input" placeholder="Search For Files" /><button onclick="search_directory(document.getElementById('search_input').value)">GO</button></div>
         </div>
         <div> <h4>Create Folder</h4>
                    <div><button id="create_folder_button">Create Folder</button></div>
@@ -336,11 +337,11 @@
 
         </div>
     </div>
-    <div id="div_more_info"
+    <div id="div_more_file_info"
         style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; border:1px solid #ccc; box-shadow:0 2px 10px rgba(0,0,0,0.2); padding:20px; z-index:1000;">
         <span id="dialog_close"
-            style="position:absolute; top:10px; right:15px; cursor:pointer; font-weight:bold;">&times;</span>
-        <div id="dialog_content">
+            style="position:absolute; top:10px; right:15px; cursor:pointer; font-weight:bold;" onclick="close_div('div_more_file_info')">&times;</span>
+        <div id="dialog_file_content">
             Pleace holder
 
         </div>
@@ -348,9 +349,9 @@
         <div id="file_search_div"
         style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; border:1px solid #ccc; box-shadow:0 2px 10px rgba(0,0,0,0.2); padding:20px; z-index:500;">
         <span id="filse_search_dialog_close"
-            style="position:absolute; top:10px; right:15px; cursor:pointer; font-weight:bold;">&times;</span>
+            style="position:absolute; top:10px; right:15px; cursor:pointer; font-weight:bold;" onclick="close_div('file_search_div')">&times;</span>
         <div id="file_search_dialog_content">
-            Pleace holder
+            Place holder
 
         </div>
     </div>
