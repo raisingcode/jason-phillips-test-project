@@ -15,6 +15,7 @@ dotnet run
 ```
 
 The API will run on `https://localhost:7146` and `http://localhost:5120`
+To UI is loaded on index, ie https://localhost:7146/index.html
 
 ## Configuration
 
